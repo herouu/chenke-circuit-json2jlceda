@@ -84,6 +84,7 @@ export function buildPcbIndex(cj: AnyCircuitElement[]): PcbIndex {
   const unindexedComponentIds: string[] = []
   const traces: any[] = []
   const vias: any[] = []
+  const cutouts: any[] = []
   const rawSilkscreen: any[] = []
   let board: any | undefined
 
@@ -151,6 +152,10 @@ export function buildPcbIndex(cj: AnyCircuitElement[]): PcbIndex {
     }
     if (type === "pcb_via") {
       vias.push(element)
+      continue
+    }
+    if (type === "pcb_cutout") {
+      cutouts.push(element)
       continue
     }
     if (type.startsWith(SILKSCREEN_PREFIX)) {
@@ -236,6 +241,7 @@ export function buildPcbIndex(cj: AnyCircuitElement[]): PcbIndex {
     orphanElements,
     traces,
     vias,
+    cutouts,
     // `silkscreen` 语义为「板级丝印」，与 `boardSilkscreen` 等价，保留旧字段兼容。
     silkscreen: boardSilkscreen,
     boardSilkscreen,

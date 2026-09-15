@@ -9,6 +9,10 @@ export type DiagnosticCode =
   | "missing-component-id" | "orphan-pad"
   | "duplicate-id"
   | "layout-scaled"
+  /** 走线 route 结构异常（如相邻 wire 点跨层却无 via/through_pad）。 */
+  | "invalid-trace"
+  /** route 内含 via 点但缺少对应 `pcb_via` 元素，已回退生成 VIA 行。 */
+  | "missing-via"
 
 export interface EproDiagnostic {
   code: DiagnosticCode
@@ -135,6 +139,13 @@ export interface PcbIndex {
   orphanElements?: any[]
   traces: any[]
   vias: any[]
+  /**
+   * 板内挖槽（`pcb_cutout`）原始元素。
+   *
+   * 当前 `.epcb` 尚无经规范/官方样例确证的内槽表达方式，故仅收集用于
+   * 发诊断，不静默丢弃也不猜测几何。
+   */
+  cutouts: any[]
   /**
    * 板级丝印别名，与 `boardSilkscreen` **等价**（保留旧字段兼容）。
    * 新代码请使用 `boardSilkscreen`。

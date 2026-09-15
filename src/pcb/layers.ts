@@ -28,6 +28,22 @@ export function layerIdForCircuitLayer(layer: string | undefined): 1 | 2 | numbe
   return 1
 }
 
+/**
+ * 可失败的层解析：缺失、非字符串、或无法识别为已知层时返回 `undefined`。
+ *
+ * 供「必须校验后再使用」的调用点（如 `pcb_trace` 的 wire / through_pad 层）
+ * 使用；`layerIdForCircuitLayer` 的默认回退语义保持不动，避免波及既有调用点。
+ */
+export function tryLayerIdForCircuitLayer(layer: unknown): number | undefined {
+  const name = typeof layer === "string" ? layer : (layer as any)?.name
+  if (typeof name !== "string" || name.length === 0) return undefined
+  if (name === "top") return 1
+  if (name === "bottom") return 2
+  const match = /^inner(\d+)$/.exec(name)
+  if (match && match[1]) return 14 + Number(match[1])
+  return undefined
+}
+
 /** 顶层/底层丝印层号。 */
 export function silkscreenLayerId(layer: string | undefined): 3 | 4 {
   const name = typeof layer === "string" ? layer : (layer as any)?.name
@@ -135,3 +151,70 @@ export const PCB_LAYER_LINES: unknown[][] = [
     true,
   ],
 ]
+
+/**
+ * 官方 `.epcb` 中内层 `Inner3..Inner32`（层号 17..46）的 `LAYER` 声明，
+ * 逐行照抄官方示例 `21bf3cb7badf4afaad0dd41b43ce6d3b.epcb`。
+ *
+ * 仅在文档实际引用到某内层时才补写对应声明（见 `pcbLayerLines`），
+ * 避免无条件铺满 17..46 而改变 2/4 层板（如测试夹具）的输出。
+ */
+export const PCB_INNER_LAYER_LINES: Record<number, unknown[]> = {
+  17: ["LAYER", 17, "SIGNAL", "Inner3", 0, "#00ff00", 1, "#007f00", 0.5],
+  18: ["LAYER", 18, "SIGNAL", "Inner4", 0, "#bc8e00", 1, "#5e4700", 0.5],
+  19: ["LAYER", 19, "SIGNAL", "Inner5", 0, "#70dbfa", 1, "#386d7d", 0.5],
+  20: ["LAYER", 20, "SIGNAL", "Inner6", 0, "#00cc66", 1, "#006633", 0.5],
+  21: ["LAYER", 21, "SIGNAL", "Inner7", 0, "#9966ff", 1, "#4c337f", 0.5],
+  22: ["LAYER", 22, "SIGNAL", "Inner8", 0, "#800080", 1, "#400040", 0.5],
+  23: ["LAYER", 23, "SIGNAL", "Inner9", 0, "#008080", 1, "#004040", 0.5],
+  24: ["LAYER", 24, "SIGNAL", "Inner10", 0, "#15935f", 1, "#a.492f", 0.5],
+  25: ["LAYER", 25, "SIGNAL", "Inner11", 0, "#000080", 1, "#000040", 0.5],
+  26: ["LAYER", 26, "SIGNAL", "Inner12", 0, "#00b400", 1, "#005a00", 0.5],
+  27: ["LAYER", 27, "SIGNAL", "Inner13", 0, "#2e4756", 1, "#17232b", 0.5],
+  28: ["LAYER", 28, "SIGNAL", "Inner14", 0, "#99842f", 1, "#4c4217", 0.5],
+  29: ["LAYER", 29, "SIGNAL", "Inner15", 0, "#ffffaa", 1, "#7f7f55", 0.5],
+  30: ["LAYER", 30, "SIGNAL", "Inner16", 0, "#99842f", 1, "#4c4217", 0.5],
+  31: ["LAYER", 31, "SIGNAL", "Inner17", 0, "#2e4756", 1, "#17232b", 0.5],
+  32: ["LAYER", 32, "SIGNAL", "Inner18", 0, "#3535ff", 1, "#1a1a7f", 0.5],
+  33: ["LAYER", 33, "SIGNAL", "Inner19", 0, "#8000bc", 1, "#40005e", 0.5],
+  34: ["LAYER", 34, "SIGNAL", "Inner20", 0, "#43ae5f", 1, "#21572f", 0.5],
+  35: ["LAYER", 35, "SIGNAL", "Inner21", 0, "#c3ecce", 1, "#617667", 0.5],
+  36: ["LAYER", 36, "SIGNAL", "Inner22", 0, "#728978", 1, "#39443c", 0.5],
+  37: ["LAYER", 37, "SIGNAL", "Inner23", 0, "#39503f", 1, "#1c281f", 0.5],
+  38: ["LAYER", 38, "SIGNAL", "Inner24", 0, "#0c715d", 1, "#06382e", 0.5],
+  39: ["LAYER", 39, "SIGNAL", "Inner25", 0, "#5a8a80", 1, "#2d4540", 0.5],
+  40: ["LAYER", 40, "SIGNAL", "Inner26", 0, "#2b937e", 1, "#15493f", 0.5],
+  41: ["LAYER", 41, "SIGNAL", "Inner27", 0, "#23999d", 1, "#114c4e", 0.5],
+  42: ["LAYER", 42, "SIGNAL", "Inner28", 0, "#45b4e3", 1, "#225a71", 0.5],
+  43: ["LAYER", 43, "SIGNAL", "Inner29", 0, "#215da1", 1, "#102e50", 0.5],
+  44: ["LAYER", 44, "SIGNAL", "Inner30", 0, "#4564d7", 1, "#22326b", 0.5],
+  45: ["LAYER", 45, "SIGNAL", "Inner31", 0, "#6969e9", 1, "#343474", 0.5],
+  46: ["LAYER", 46, "SIGNAL", "Inner32", 0, "#9069e9", 1, "#483474", 0.5],
+}
+
+/**
+ * 返回 PCB 层骨架，并在 `LAYER 47` 之前按升序插入**被引用**的内层声明。
+ *
+ * 未传 / 传空集合时返回与 `PCB_LAYER_LINES` 逐元素相同的内容，
+ * 保证不使用内层的 2/4 层板产物不变。
+ */
+export function pcbLayerLines(
+  usedLayerIds: Iterable<number> = [],
+): unknown[][] {
+  const requested = [...new Set(usedLayerIds)]
+    .filter((id) => Object.prototype.hasOwnProperty.call(PCB_INNER_LAYER_LINES, id))
+    .sort((a, b) => a - b)
+  const lines: unknown[][] = []
+  for (const line of PCB_LAYER_LINES) {
+    if (
+      Array.isArray(line) &&
+      line[0] === "LAYER" &&
+      line[1] === 47 &&
+      requested.length > 0
+    ) {
+      for (const id of requested) lines.push(PCB_INNER_LAYER_LINES[id]!)
+    }
+    lines.push(line)
+  }
+  return lines
+}

@@ -22,7 +22,7 @@ import {
   uuidFor,
   warn,
 } from "./board"
-import { PCB_LAYER_LINES } from "./layers"
+import { pcbLayerLines, tryLayerIdForCircuitLayer } from "./layers"
 import { buildComponentRows, type EidGenerator } from "./components"
 import { buildTraceRows, buildViaRows } from "./traces"
 import { buildSilkscreenRows } from "./silkscreen"
@@ -48,6 +48,32 @@ function pcbCollection(ctx: any, key: string, fallback: any[]): any[] {
   const value = ctx?.pcb?.[key]
   if (Array.isArray(value)) return value
   return fallback
+}
+
+/**
+ * 收集文档实际引用到的铜层号，用于**按需**补写内层 `LAYER` 声明。
+ *
+ * 仅走线（wire / through_pad）会引用内层编号；未引用内层的 2/4 层板
+ * 结果集合为空，`pcbLayerLines` 输出与静态骨架逐元素一致。
+ */
+function usedCopperLayerIds(c: any): Set<number> {
+  const ids = new Set<number>()
+  for (const trace of pcbCollection(c, "traces", [])) {
+    const route = Array.isArray(trace?.route) ? trace.route : []
+    for (const point of route) {
+      if (!point) continue
+      if (point.route_type === "wire") {
+        const id = tryLayerIdForCircuitLayer(point.layer)
+        if (id !== undefined) ids.add(id)
+      } else if (point.route_type === "through_pad") {
+        for (const value of [point.start_layer, point.end_layer]) {
+          const id = tryLayerIdForCircuitLayer(value)
+          if (id !== undefined) ids.add(id)
+        }
+      }
+    }
+  }
+  return ids
 }
 
 /**
@@ -98,9 +124,41 @@ function buildPcbDocInner(ctx: ConversionContext): PcbDocResult | null {
   })
 
   writer.push(["CANVAS", 0, 0, "mil", 5, 5, 5, 5, 1, 1, 2, 0, 5])
-  for (const layerLine of PCB_LAYER_LINES) writer.push(layerLine)
+  // 仅补写被引用的内层声明，未用内层的 2/4 层板输出不变。
+  for (const layerLine of pcbLayerLines(usedCopperLayerIds(c))) {
+    writer.push(layerLine)
+  }
 
   const eid = createEidGenerator()
+
+  // 板内挖槽（pcb_cutout）：未找到经规范或官方样例**确证**的 2D 板内挖槽表达方式，
+  // 故仅收集并告警，不猜测几何、也不静默丢弃。
+  //
+  // 已排查的候选（均未确证）：
+  //   ① layer-11 内环 POLY —— `polygon-system/poly.md:19` 明确 POLY 第 7 字段为
+  //      「单多边形」（不能直接带洞）；只有 `fill.md:18` 的「复杂多边形」支持带洞，
+  //      而板框用的是 POLY。
+  //   ② 无铜 PAD + 同形孔 —— 本仓库 `pcb_hole` 已是非金属化孔先例
+  //      （见下方 standaloneHoles 分支），但多边形/路径槽无法用 PAD 孔形状表达。
+  //   ③ `SHELL_ENTITY(SLOT)` —— 见 `.refs/format-skill/` 对象格式文档（非 `.epcb` 行格式）。
+  //   ④ 官方 PRIMITIVE 清单含 `"SLOTREGION"`：`21bf3cb7…epcb:142` 与
+  //      `de0a8…epcb:151` 均为 `["PRIMITIVE","SLOTREGION",1,1]`，但两样本**零使用行**。
+  // 查证范围：`.refs/v2spec/docs/zh/pcb/{primitives/index.md,pcb-file.md,primitives/pad.md,
+  //   primitives/{line,via,attr,string}.md, polygon-system/*.md}`、
+  //   `.refs/v2spec/examples/**/.epcb`、`.refs/format-skill/**`、`.refs/cj-to-easyeda-std/**`。
+  // 关键词：cutout / slot / SLOT / 挖槽 / 槽孔 / SLOTREGION / SHELLCUT / OUTLINE。
+  // 待 EDA 实测确证后单独开单实现。
+  const cutouts = Array.isArray(ctx.pcb.cutouts) ? ctx.pcb.cutouts : []
+  if (cutouts.length > 0) {
+    const ids = cutouts
+      .map((cut: any) => String(cut?.pcb_cutout_id ?? cut?.shape ?? ""))
+      .join(", ")
+    warn(
+      c,
+      `pcb_cutout 未找到经规范/官方样例确证的 2D 板内挖槽表达方式，暂不写出：已跳过 ${cutouts.length} 个（${ids}）`,
+      "unsupported-element",
+    )
+  }
 
   // 板框：layer 11 闭合 POLY。
   if (board) writer.push(buildBoardOutlineRow(board, eid()))
@@ -116,12 +174,14 @@ function buildPcbDocInner(ctx: ConversionContext): PcbDocResult | null {
   }
 
   // 走线。
-  for (const row of buildTraceRows(c, pcbCollection(c, "traces", []), eid)) {
+  const traces = pcbCollection(c, "traces", [])
+  for (const row of buildTraceRows(c, traces, eid)) {
     writer.push(row)
   }
 
-  // 过孔（统一由 pcb_via 列表输出一次）。
-  for (const row of buildViaRows(c, pcbCollection(c, "vias", []), eid)) {
+  // 过孔：pcb_via 为权威来源；route 内缺失对应 pcb_via 的 via 点回退补齐。
+  const vias = pcbCollection(c, "vias", [])
+  for (const row of buildViaRows(c, vias, traces, eid)) {
     writer.push(row)
   }
 
