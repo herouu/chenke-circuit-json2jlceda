@@ -43,7 +43,7 @@ function buildSummary(
 async function main(): Promise<void> {
   const program = new Command()
   program
-    .name("circuit-json-to-epro2")
+    .name("chenke-circuit-json2jlceda")
     .description("将 tscircuit circuit-json 转换为嘉立创EDA专业版 V2 .epro 工程")
     .argument("<input.json>", "circuit-json 输入文件")
     .option("-o, --output <path>", "输出 .epro 文件或目录（配合 --files）")

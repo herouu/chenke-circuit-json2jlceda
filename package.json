@@ -1,6 +1,6 @@
 {
-  "name": "circuit-json-to-epro2",
-  "version": "0.0.0",
+  "name": "chenke-circuit-json2jlceda",
+  "version": "0.1.0",
   "description": "将 tscircuit circuit-json 转换为嘉立创EDA专业版 (EasyEDA Pro) V2 .epro 工程文件",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,12 +13,14 @@
     }
   },
   "bin": {
-    "circuit-json-to-epro2": "./dist/cli.js"
+    "chenke-circuit-json2jlceda": "dist/cli.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
+    "prepare": "tsup",
+    "prepublishOnly": "tsup",
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -33,6 +35,14 @@
     "epro"
   ],
   "license": "MIT",
+  "author": "herouu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/herouu/chenke-circuit-json2jlceda.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@tscircuit/circuit-json-util": "^0.0.113",
     "circuit-json": "^0.0.491",
@@ -45,5 +55,8 @@
     "tsx": "^4.23.13",
     "typescript": "^5.7.3",
     "vitest": "^5.0.0"
+  },
+  "directories": {
+    "test": "tests"
   }
 }
