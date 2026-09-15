@@ -58,5 +58,9 @@
   },
   "directories": {
     "test": "tests"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/herouu/chenke-circuit-json2jlceda/issues"
+  },
+  "homepage": "https://github.com/herouu/chenke-circuit-json2jlceda#readme"
 }
